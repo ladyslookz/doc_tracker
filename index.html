@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบรับและติดตามเอกสาร</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    .top-color-bar {
+      height: 6px;
+      background: linear-gradient(90deg, #dc2626 0%, #dc2626 33.33%, #eab308 33.33%, #eab308 66.66%, #2563eb 66.66%, #2563eb 100%);
+      width: 100%;
+    }
+    body { background-color: #f8fafc; color: #1e293b; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .btn-blue { background-color: #2563eb; color: white; border-radius: 8px; font-weight: 600; }
+    .btn-blue:hover { background-color: #1d4ed8; color: white; }
+    .btn-red { background-color: #dc2626; color: white; border-radius: 8px; font-weight: 600; }
+    .btn-red:hover { background-color: #b91c1c; color: white; }
+    .btn-yellow { background-color: #eab308; color: #0f172a; border-radius: 8px; font-weight: 600; }
+    .btn-yellow:hover { background-color: #ca8a04; color: #0f172a; }
+    .nav-pills .nav-link { color: #475569; font-weight: 600; background-color: #f1f5f9; border-radius: 8px; padding: 8px 16px; font-size: 0.9rem; }
+    .nav-pills .nav-link.active { background-color: #2563eb !important; color: white !important; }
+    .card { border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.02); background-color: #ffffff; }
+    .form-control, .form-select { border-radius: 8px; border-color: #cbd5e1; padding: 10px 14px; }
+  </style>
+</head>
+<body onload="initApp()">
+
+  <div class="top-color-bar"></div>
+
+  <div class="container py-4" style="max-width: 900px;">
+    
+    <!-- ส่วนหัวข้อหลัก -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 bg-white p-4 rounded-4 shadow-sm border">
+      <div>
+        <h4 class="fw-bold mb-1" style="color: #0f172a;">ระบบรับและติดตามเอกสาร</h4>
+        <p class="mb-0 text-muted small">ระบบอัจฉริยะ รองรับสแกน QR, OCR และติดตามสถานะ</p>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button class="btn btn-yellow btn-sm px-3 py-2" onclick="switchTab('track-tab')">🔍 เช็คสถานะด่วน</button>
+        <button class="btn btn-red btn-sm px-3 py-2 text-white" onclick="checkAdminLogin()">⚙️ แอดมิน</button>
+      </div>
+    </div>
+    
+    <!-- เมนูแท็บ -->
+    <ul class="nav nav-pills mb-4 gap-2 justify-content-center justify-content-md-start" id="pills-tab">
+      <li class="nav-item"><button class="nav-link active" id="tab-form-tab" onclick="switchTab('form-tab')">📥 ส่งงาน/เอกสาร</button></li>
+      <li class="nav-item"><button class="nav-link" id="tab-track-tab" onclick="switchTab('track-tab')">📋 ติดตามสถานะ</button></li>
+      <li class="nav-item"><button class="nav-link" id="tab-admin-tab" onclick="switchTab('admin-tab')" style="display:none;">แอดมินจัดการ</button></li>
+    </ul>
+
+    <div class="tab-content">
+      
+      <!-- 1. ฟอร์มส่งงาน (รวมสแกน QR ผู้ส่ง + OCR + ถ่ายรูป) -->
+      <div class="card p-4 p-md-5 shadow-sm mb-4" id="form-tab">
+        <h5 class="fw-bold mb-4 text-primary" style="border-left: 4px solid #2563eb; padding-left: 10px;">กรอกรายละเอียดเอกสารใหม่</h5>
+        <form id="docForm">
+          
+          <!-- ชื่อผู้ส่ง + สแกน QR ผู้ส่ง -->
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label fw-semibold text-secondary mb-0">ชื่อ-นามสกุล ผู้ส่ง</label>
+              <button type="button" class="btn btn-outline-primary btn-sm py-0" onclick="startUserQrScan()">📷 สแกน QR Code ผู้ส่ง</button>
+            </div>
+            <select class="form-select" id="name" required>
+              <option value="">-- เลือกรายชื่อผู้ส่ง หรือสแกน QR --</option>
+            </select>
+          </div>
+
+          <!-- กล่องแสดงผลกล้องสแกน QR ผู้ส่ง -->
+          <div id="qr-reader-container" class="mb-3 p-3 border rounded bg-light" style="display: none;">
+            <div id="qr-reader" style="width: 100%;"></div>
+            <button type="button" class="btn btn-secondary btn-sm mt-2 w-100" onclick="stopUserQrScan()">ปิดกล้องสแกน QR</button>
+          </div>
+
+          <!-- หมวดหมู่เอกสาร -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold text-secondary">หมวดหมู่เอกสาร</label>
+            <select class="form-select" id="category" required>
+              <option value="">กำลังโหลดหมวดหมู่...</option>
+            </select>
+          </div>
+
+          <!-- ชื่อเรื่องเอกสาร + OCR -->
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label fw-semibold text-secondary mb-0">ชื่อเรื่องเอกสาร</label>
+              <button type="button" class="btn btn-outline-success btn-sm py-0" id="ocrBtn" onclick="runOcrScan()" disabled>🪄 สแกน OCR อ่านชื่อเรื่องจากรูป</button>
+            </div>
+            <input type="text" class="form-control" id="title" placeholder="ระบุชื่อเรื่อง หรืออัพโหลดรูปด้านล่างเพื่อให้ระบบอ่านให้อัตโนมัติ" required>
+            <div id="ocrStatus" class="form-text text-success fw-semibold" style="display: none;">กำลังอ่านข้อความจากรูปภาพ กรุณารอสักครู่...</div>
+          </div>
+
+          <!-- ที่อยู่เอกสาร -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold text-secondary">ที่อยู่เอกสาร (เช่น ตู้เอกสาร A1, โต๊ะธุรการ)</label>
+            <input type="text" class="form-control" id="location" placeholder="ระบุสถานที่จัดเก็บเอกสารจริง" required>
+          </div>
+
+          <!-- ถ่ายรูป / อัพโหลดเอกสาร -->
+          <div class="mb-4">
+            <label class="form-label fw-semibold text-secondary">ถ่ายรูป / อัพโหลดเอกสาร</label>
+            <input type="file" class="form-control" id="fileInput" accept="image/*" capture="environment" onchange="handleFileSelected(event)" required>
+            <div class="form-text text-muted">เมื่อเลือกรูปแล้ว ปุ่ม "สแกน OCR" ด้านบนจะพร้อมใช้งานทันที</div>
+          </div>
+
+          <button type="submit" class="btn btn-blue w-100 py-2 shadow-sm" id="submitBtn">ยืนยันการส่งเอกสาร</button>
+        </form>
+
+        <!-- การ์ดสำเร็จ -->
+        <div id="successCard" class="card mt-4 p-4 border-success text-center" style="display: none; background: #f0fff4;">
+          <h5 class="fw-bold text-success mb-3">🎉 บันทึกเอกสารสำเร็จ!</h5>
+          <p class="text-muted small">เลขประจำตัวเอกสารของคุณคือ</p>
+          <h3 id="cardDocId" class="text-primary fw-bold"></h3>
+          <div id="qrcode" class="d-flex justify-content-center my-3"></div>
+          <button class="btn btn-yellow" onclick="resetForm()">ส่งเอกสารฉบับอื่นเพิ่ม</button>
+        </div>
+      </div>
+
+      <!-- 2. ฟอร์มติดตามสถานะ -->
+      <div class="card p-4 p-md-5 shadow-sm mb-4" id="track-tab" style="display: none;">
+        <h5 class="fw-bold mb-4 text-primary" style="border-left: 4px solid #2563eb; padding-left: 10px;">ค้นหาและติดตามสถานะเอกสาร</h5>
+        <div class="input-group mb-4">
+          <input type="text" class="form-control" id="searchInput" placeholder="กรอกเลขเอกสาร (เช่น DOC-...)">
+          <button class="btn btn-blue px-4" type="button" onclick="searchData()">ค้นหา</button>
+        </div>
+        <div id="resultArea"></div>
+      </div>
+
+      <!-- 3. โหมดแอดมินจัดการ -->
+      <div class="card p-4 p-md-5 shadow-sm mb-4" id="admin-tab" style="display: none;">
+        <h5 class="fw-bold mb-4 text-danger">⚙️ จัดการรายการเอกสารทั้งหมด (แอดมิน)</h5>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle" style="font-size: 0.85rem;">
+            <thead class="table-light text-secondary">
+              <tr>
+                <th>เลขเอกสาร</th>
+                <th>วันที่</th>
+                <th>ผู้ส่ง / เรื่อง</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="adminTableBody">
+              <tr><td colspan="4" class="text-center py-4 text-muted">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ** สำคัญ: นำ Web App URL ของ Google Apps Script มาใส่แทนที่ตรงนี้ **
+    const WEB_APP_URL = "ใส่_Web_App_URL_ของGoogle_Script_ที่นี่";
+
+    let html5QrCode = null;
+
+    function initApp() {
+      loadCategories();
+      loadUsers();
+    }
+
+    function switchTab(tabId) {
+      document.getElementById('form-tab').style.display = (tabId === 'form-tab') ? 'block' : 'none';
+      document.getElementById('track-tab').style.display = (tabId === 'track-tab') ? 'block' : 'none';
+      document.getElementById('admin-tab').style.display = (tabId === 'admin-tab') ? 'block' : 'none';
+      
+      document.getElementById('tab-form-tab').classList.toggle('active', tabId === 'form-tab');
+      document.getElementById('tab-track-tab').classList.toggle('active', tabId === 'track-tab');
+      document.getElementById('tab-admin-tab').classList.toggle('active', tabId === 'admin-tab');
+
+      if (tabId === 'admin-tab') loadAdminData();
+    }
+
+    function loadCategories() {
+      fetch(WEB_APP_URL + "?action=getCategories")
+        .then(res => res.json())
+        .then(cats => {
+          var select = document.getElementById('category');
+          select.innerHTML = '<option value="">-- เลือกหมวดหมู่เอกสาร --</option>';
+          if(cats && cats.length > 0) {
+            cats.forEach(cat => { select.innerHTML += `<option value="${cat}">${cat}</option>`; });
+          }
+        }).catch(e => {
+          document.getElementById('category').innerHTML = '<option value="ทั่วไป">ทั่วไป</option><option value="ด่วน">ด่วน</option>';
+        });
+    }
+
+    function loadUsers() {
+      var users = ["นายสมชาย ใจดี", "นางสาวสมหญิง รักงาน", "นายวิชัย มั่นคง", "เจ้าหน้าที่ธุรการ"];
+      var select = document.getElementById('name');
+      select.innerHTML = '<option value="">-- เลือกรายชื่อผู้ส่ง หรือสแกน QR --</option>';
+      users.forEach(user => { select.innerHTML += `<option value="${user}">${user}</option>`; });
+    }
+
+    // เปิดกล้องสแกน QR ผู้ส่ง
+    function startUserQrScan() {
+      document.getElementById('qr-reader-container').style.display = 'block';
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("qr-reader");
+      }
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          var select = document.getElementById('name');
+          select.value = decodedText;
+          alert("สแกนผู้ส่งสำเร็จ: " + decodedText);
+          stopUserQrScan();
+        },
+        (error) => {}
+      ).catch(err => {
+        document.getElementById('qr-reader-container').style.display = 'none';
+        alert("ไม่สามารถเปิดกล้องสแกน QR ได้");
+      });
+    }
+
+    function stopUserQrScan() {
+      if (html5QrCode && html5QrCode.isScanning) {
+        html5QrCode.stop().then(() => {
+          document.getElementById('qr-reader-container').style.display = 'none';
+        });
+      } else {
+        document.getElementById('qr-reader-container').style.display = 'none';
+      }
+    }
+
+    function handleFileSelected(event) {
+      var file = event.target.files[0];
+      if (file) { document.getElementById('ocrBtn').disabled = false; }
+    }
+
+    // ฟังก์ชัน OCR อ่านชื่อเรื่องจากรูป
+    function runOcrScan() {
+      var fileInput = document.getElementById('fileInput');
+      if(fileInput.files.length === 0) {
+        alert("กรุณาเลือกหรือถ่ายรูปเอกสารก่อนครับ");
+        return;
+      }
+      var file = fileInput.files[0];
+      var statusEl = document.getElementById('ocrStatus');
+      statusEl.style.display = 'block';
+      document.getElementById('ocrBtn').disabled = true;
+
+      Tesseract.recognize(file, 'tha+eng', {}).then(({ data: { text } }) => {
+        statusEl.style.display = 'none';
+        document.getElementById('ocrBtn').disabled = false;
+        var cleanText = text.trim().split('\n')[0] || "เอกสารสแกนจากระบบ";
+        document.getElementById('title').value = cleanText;
+        alert("อ่านข้อความจากเอกสารสำเร็จ!");
+      }).catch(err => {
+        statusEl.style.display = 'none';
+        document.getElementById('ocrBtn').disabled = false;
+        alert("ไม่สามารถอ่านข้อความจากภาพได้ กรุณากรอกชื่อเรื่องด้วยตนเอง");
+      });
+    }
+
+    // ส่งฟอร์ม
+    document.getElementById('docForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerText = 'กำลังอัพโหลดข้อมูล...';
+
+      var file = document.getElementById('fileInput').files[0];
+      var reader = new FileReader();
+
+      reader.onload = function(event) {
+        var base64Data = event.target.result.split(',')[1];
+        var payload = {
+          action: "saveData",
+          name: document.getElementById('name').value,
+          category: document.getElementById('category').value,
+          title: document.getElementById('title').value,
+          location: document.getElementById('location').value,
+          imageFile: base64Data,
+          fileName: file.name,
+          mimeType: file.type
+        };
+
+        fetch(WEB_APP_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(res => {
+          if(res.success) {
+            document.getElementById('docForm').style.display = 'none';
+            document.getElementById('successCard').style.display = 'block';
+            document.getElementById('cardDocId').innerText = res.docId;
+            new QRCode(document.getElementById("qrcode"), { text: res.docId, width: 100, height: 100 });
+          } else {
+            alert("Error: " + res.error);
+            btn.disabled = false;
+            btn.innerText = 'ยืนยันการส่งเอกสาร';
+          }
+        }).catch(err => {
+          alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+          btn.disabled = false;
+          btn.innerText = 'ยืนยันการส่งเอกสาร';
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    function resetForm() {
+      document.getElementById('docForm').reset();
+      document.getElementById('docForm').style.display = 'block';
+      document.getElementById('successCard').style.display = 'none';
+      document.getElementById('submitBtn').disabled = false;
+      document.getElementById('submitBtn').innerText = 'ยืนยันการส่งเอกสาร';
+      document.getElementById('ocrBtn').disabled = true;
+    }
+
+    function searchData() {
+      var key = document.getElementById('searchInput').value.trim();
+      if(!key) return;
+      
+      fetch(WEB_APP_URL + "?action=search&docId=" + encodeURIComponent(key))
+        .then(res => res.json())
+        .then(res => {
+          var area = document.getElementById('resultArea');
+          if(res.found) {
+            area.innerHTML = `
+              <div class="alert alert-light border p-3 rounded bg-white">
+                <h6 class="fw-bold text-primary">✨ พบข้อมูลเอกสาร</h6>
+                <p class="mb-1"><b>เลขเอกสาร:</b> ${res.docId}</p>
+                <p class="mb-1"><b>ชื่อเรื่อง:</b> ${res.title}</p>
+                <p class="mb-1"><b>ผู้ส่ง:</b> ${res.name}</p>
+                <p class="mb-2"><b>สถานะ:</b> <span class="badge bg-warning text-dark">${res.status}</span></p>
+                <a href="${res.image}" target="_blank" class="btn btn-sm btn-blue">ดูรูปเอกสารต้นฉบับ</a>
+              </div>`;
+          } else {
+            area.innerHTML = `<div class="alert alert-danger">❌ ไม่พบข้อมูลเอกสาร</div>`;
+          }
+        });
+    }
+
+    function checkAdminLogin() {
+      var pass = prompt("กรุณากรอกรหัสผ่านแอดมิน:");
+      if (pass === "1234") {
+        document.getElementById('tab-admin-tab').style.display = 'block';
+        switchTab('admin-tab');
+      } else if(pass !== null) {
+        alert("รหัสผ่านไม่ถูกต้อง!");
+      }
+    }
+
+    function loadAdminData() {
+      fetch(WEB_APP_URL + "?action=getAllDocs")
+        .then(res => res.json())
+        .then(data => {
+          var tbody = document.getElementById('adminTableBody');
+          tbody.innerHTML = "";
+          if(data.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">ไม่มีข้อมูล</td></tr>`;
+            return;
+          }
+          data.forEach(item => {
+            tbody.innerHTML += `
+              <tr>
+                <td class="fw-bold text-primary">${item.docId}</td>
+                <td>${item.date}</td>
+                <td><b>${item.title}</b><br><small>ผู้ส่ง: ${item.name}</small></td>
+                <td><span class="badge bg-info text-dark">${item.status}</span></td>
+              </tr>`;
+          });
+        });
+    }
+  </script>
+</body>
+</html>
